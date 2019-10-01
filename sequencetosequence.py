@@ -18,6 +18,7 @@ class Encoder(keras.layers.Layer):
         self.embedder = keras.layers.Embedding(input_dim=vocab_size, output_dim=hidden_size)
         self.lstm = keras.layers.Bidirectional(keras.layers.LSTM(units=hidden_size, return_sequences=True, return_state=True))
 
+    @tf.function
     def call(self, src):
         src_embed = self.embedder(src)
         h = self.lstm(src_embed)
@@ -48,6 +49,7 @@ class Decoder(keras.layers.Layer):
 
 
 
+    @tf.function
     def call(self, src_hidden, trg, mask,previous_hidden):
 
         trg_embed = self.embedder(trg)
@@ -76,6 +78,8 @@ class Seq2Seq(tf.keras.Model):
         self.classifier = keras.layers.Dense(units=trg_size)
         self.trg_size = trg_size
 
+
+    @tf.function
     def call(self, src, trg, training=False):
 
         n_batch = trg.shape[0]

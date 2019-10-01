@@ -12,8 +12,8 @@ import os
 
 #compute_accuracy=tf.keras.metrics.SparseCategoricalAccuracy()
 
-
-# @tf.function(input_signature=(tf.TensorSpec(shape=[None,None],dtype=tf.int32),
+#
+#@tf.function(input_signature=(tf.TensorSpec(shape=[None,None],dtype=tf.int32),
 #                               tf.TensorSpec(shape=[None,None,None],dtype=tf.float32)))
 def compute_loss(true,predict):
     pre_loss=tf.keras.losses.sparse_categorical_crossentropy(y_pred=predict,y_true=true[:,1:],from_logits=True)
@@ -21,15 +21,12 @@ def compute_loss(true,predict):
 
 
     num_pad=tf.reduce_sum(tf.cast(mask,tf.float32))
-
     pre_loss*=tf.cast(mask,tf.float32)
-
-
 
     return tf.reduce_sum(pre_loss)/num_pad
 #
-#
-# @tf.function(input_signature=(tf.TensorSpec(shape=[None,None],dtype=tf.int32),
+# #
+#@tf.function(input_signature=(tf.TensorSpec(shape=[None,None],dtype=tf.int32),
 #                               tf.TensorSpec(shape=[None,None,None],dtype=tf.float32)))
 def compute_accuracy(true,predict):
     predictions=tf.cast(tf.argmax(predict,axis=-1),tf.int32)
@@ -38,12 +35,10 @@ def compute_accuracy(true,predict):
 
     return tf.reduce_mean(tf.cast(tf.equal(predictions,true[:,1:]),tf.float32))
 
-#
-# # @tf.function(input_signature=(tf.TensorSpec(shape=[None,None],dtype=tf.int32),
-# #                               tf.TensorSpec(shape=[None,None],dtype=tf.int32)))
 
-@tf.function()
-def train_one_step(model, optimizer, x, y):
+#@tf.function
+def train_one_step(x, y,model,optimizer):
+
     with tf.GradientTape() as tape:
         predict = model(x,y,True)
         loss = compute_loss(y,predict)
@@ -55,11 +50,13 @@ def train_one_step(model, optimizer, x, y):
 
     return loss, accuracy
 
+#
+
 
 # @tf.function(input_signature=(tf.TensorSpec(shape=[None,None],dtype=tf.int32),
 #                               tf.TensorSpec(shape=[None,None],dtype=tf.int32)))
 
-@tf.function
+#@tf.function
 def eval_step(model, x, y):
     predict = model.call(x,y,True)
     loss = compute_loss(y[:,1:],predict)
@@ -90,6 +87,9 @@ class get_model(object):
         tf.keras.backend.set_learning_phase(1)
 
         gpus = tf.config.experimental.list_physical_devices('GPU')
+
+        print("start train!!\n")
+
         if gpus:
             # Restrict TensorFlow to only use the first GPU
             try:
@@ -105,7 +105,6 @@ class get_model(object):
         self.train_summary_writer = tf.summary.create_file_writer(self.train_log_dir)
         self.eval_summary_writer = tf.summary.create_file_writer(self.eval_log_dir)
 
-        print("start train!!")
         loss = 0.0
         accuracy = 0.0
 
@@ -113,7 +112,7 @@ class get_model(object):
 
             for x, y in train_data:
                 self.global_step += 1
-                loss, accuracy = train_one_step(self.model, self.optimizer, x, y)
+                loss, accuracy = train_one_step(x,y,self.model,self.optimizer)
 
                 with self.train_summary_writer.as_default():
                     tf.summary.scalar('loss', loss, step=self.global_step)
@@ -167,6 +166,8 @@ class get_model(object):
         else:
             self.model.load_weights(latest_ckpt)
         print("loaded from  ",latest)
+
+
 
 
 

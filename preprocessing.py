@@ -23,10 +23,10 @@ def preprocessing(f_name,batch_size,test_size=0.2):
 
     X_train,X_eval,y_train,y_eval=train_test_split(X_data,y_data,test_size=test_size)
 
-    X_train = tf.cast(keras.preprocessing.sequence.pad_sequences(X_train, maxlen=X_max_seq_lens), tf.int32)
-    y_train = tf.cast(keras.preprocessing.sequence.pad_sequences(y_train, maxlen=y_max_seq_lens), tf.int32)
-    X_eval = tf.cast(keras.preprocessing.sequence.pad_sequences(X_eval, maxlen=X_max_seq_lens), tf.int32)
-    y_eval = tf.cast(keras.preprocessing.sequence.pad_sequences(y_eval, maxlen=y_max_seq_lens), tf.int32)
+    X_train = tf.cast(keras.preprocessing.sequence.pad_sequences(X_train, maxlen=X_max_seq_lens,padding="post"), tf.int32)
+    y_train = tf.cast(keras.preprocessing.sequence.pad_sequences(y_train, maxlen=y_max_seq_lens,padding="post"), tf.int32)
+    X_eval = tf.cast(keras.preprocessing.sequence.pad_sequences(X_eval, maxlen=X_max_seq_lens,padding="post"), tf.int32)
+    y_eval = tf.cast(keras.preprocessing.sequence.pad_sequences(y_eval, maxlen=y_max_seq_lens,padding="post"), tf.int32)
 
     train_ds = tf.data.Dataset.from_tensor_slices((X_train, y_train))
     eval_ds = tf.data.Dataset.from_tensor_slices((X_eval, y_eval))
@@ -35,6 +35,7 @@ def preprocessing(f_name,batch_size,test_size=0.2):
     eval_ds=eval_ds.shuffle(3000).batch(batch_size)
 
     # declare witg dynamic padded sequence respectly
+
     # train_ds = pd.DataFrame({'src':X_train,'trg':y_train})
     # eval_ds = pd.DataFrame({'src':X_eval,'trg':y_eval})
     #
@@ -44,8 +45,8 @@ def preprocessing(f_name,batch_size,test_size=0.2):
     # train_ds=train_batchfier.tf_data()
     # eval_ds=eval_batchfier.tf_data()
     #
-    # train_ds = train_ds.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
-    # eval_ds = eval_ds.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+    train_ds = train_ds.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+    eval_ds = eval_ds.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
     return train_ds,eval_ds,word2idx,idx2word
 

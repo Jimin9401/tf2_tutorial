@@ -10,6 +10,7 @@ import argparse
 import os
 from tensorflow import keras
 from utils import get_model
+import numpy as np
 
 def get_angles(pos, i, d_model):
     angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
@@ -30,45 +31,6 @@ def positional_encoding(position, d_model):
 
     return tf.cast(pos_encoding, dtype=tf.float32)
 
-@tf.function(experimental_relax_shapes=True)
-def compute_loss(predict,true):
-    pre_loss=tf.nn.sparse_softmax_cross_entropy_with_logits(logits=predict,labels=true)
-    pre_loss*=tf.cast(tf.logical_not(tf.equal(x=0,y=true)),tf.float32)
-
-    return tf.reduce_mean(pre_loss)
-
-@tf.function(experimental_relax_shapes=True)
-def compute_accuracy(predict,true):
-    predictions=tf.cast(tf.argmax(predict,axis=-1),tf.int32)
-    return tf.reduce_mean(tf.cast(tf.equal(predictions,true),tf.float32))
-
-@tf.function(experimental_relax_shapes=True)
-def train_one_step(model, optimizer, x, y):
-    with tf.GradientTape() as tape:
-        predict = model(x,y,True)
-        loss = compute_loss(predict=predict[:,:-1],true= y[:,1:])
-
-    grads = tape.gradient(loss, model.trainable_variables)
-
-    optimizer.apply_gradients(zip(grads, model.trainable_variables))
-
-    accuracy = compute_accuracy(predict=predict[:,:-1],true= y[:,1:])
-
-    return loss, accuracy
-
-def train(epoch,model,optimizer,train_data):
-    loss=0.0
-    accuracy=0.0
-    for e in range(epoch):
-        for step,(x,y) in enumerate(train_data):
-            loss,accuracy=train_one_step(model,optimizer,x,y)
-            if((step+1)%50==0):
-                print("epoch:",e+1," step:",step+1," loss: {:0.5}".format(loss.numpy())," accuracy:  {:0.4}".format(accuracy.numpy()))
-        print()
-        print("epoch:",e+1," loss: {:0.5}".format(loss.numpy())," accuracy:  {:0.4}".format(accuracy.numpy()))
-        print()
-    return loss,accuracy
-
 
 class Convlayer(keras.layers.Layer):
     def __init__(self,hidden_dim,n_gram=3,decode=True):
@@ -80,6 +42,8 @@ class Convlayer(keras.layers.Layer):
         else:
             self.conv=layers.Conv1D(filters=hidden_dim*2,kernel_size=n_gram,padding="same")
 
+
+    @tf.function
     def call(self,inputs):
 
         input_convolved=self.conv(inputs)
@@ -100,6 +64,7 @@ class ConvEncoder(keras.layers.Layer):
         self.conlayers=[Convlayer(hidden_dim=hidden_dim,n_gram=n_gram,decode=False)\
                         for _ in range(num_layers)]
 
+    @tf.function
     def call(self,src):
 
         src_embed=self.embedder(src)
@@ -141,6 +106,7 @@ class ConvDecoder(keras.layers.Layer):
         self.n_gram=n_gram
         self.num_layers=num_layers
 
+    @tf.function
     def call(self,trg,src_embed,mask,training=False):
 
         trg_embed=self.embedder(trg)
@@ -178,12 +144,13 @@ class ConvSeq2Seq(keras.Model):
         self.decoder =ConvDecoder(vocab_size=vocab_size, hidden_dim=hidden_size, \
                                num_layers=num_layeres, n_gram=n_gram)
         self.classifier=layers.Dense(units=vocab_size)
+
+    @tf.function
     def call(self,src,trg=None,training=False,decoding_step=20):
 
         assert ~(trg is None and training==True)
 
         batch_size=src.shape[0]
-
 
         src_encoded=self.encoder(src)
 
@@ -222,7 +189,6 @@ class ConvSeq2Seq(keras.Model):
 
 # for debugging
 def main():
-
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
     parser = argparse.ArgumentParser()
@@ -245,7 +211,6 @@ def main():
     train_ds,eval_ds, word2idx, idx2word = preprocessing(f_name=args.f_name,batch_size=args.batch_size)
 
     convseq2seq=ConvSeq2Seq(vocab_size=len(word2idx),hidden_size=args.hidden_size,num_layeres=args.num_layer,vocab=word2idx)
-
 
     model=get_model(convseq2seq,eval_step=args.eval_step,eval_after=args.eval_after,output_dir=args.output_dir,model_name="convseq2seq")
 

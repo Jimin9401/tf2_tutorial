@@ -83,41 +83,7 @@ def test_step(images, labels):
 
 EPOCHS = 5
 
-for epoch in range(EPOCHS):
-  for images, labels in train_ds:
-    train_step(images, labels)
+for images, labels in train_ds:
+  print()
 
-  for test_images, test_labels in test_ds:
-    test_step(test_images, test_labels)
-
-  template = 'Epoch {}, Loss: {}, Accuracy: {}, Test Loss: {}, Test Accuracy: {}'
-  print(template.format(epoch+1,
-                        train_loss.result(),
-                        train_accuracy.result()*100,
-                        test_loss.result(),
-                        test_accuracy.result()*100))
-
-  # Reset the metrics for the next epoch
-  train_loss.reset_states()
-  train_accuracy.reset_states()
-  test_loss.reset_states()
-  test_accuracy.reset_states()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+model(images)
