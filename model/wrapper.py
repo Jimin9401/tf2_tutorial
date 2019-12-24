@@ -2,6 +2,8 @@ from tensorflow import keras
 import tensorflow as tf
 import os
 import numpy as np
+from abc import *
+
 
 class ModelWrapper(object):
 
@@ -18,6 +20,7 @@ class ModelWrapper(object):
         self.train_log_dir = self.output_dir+"/summary/"+str(self.model_name)+"/train/"
         self.eval_log_dir = self.output_dir+"/summary/"+str(self.model_name)+"/eval/"
 
+    @abstractmethod
     def train(self):
         """
 
@@ -27,6 +30,7 @@ class ModelWrapper(object):
 
         return NotImplementedError
 
+    @abstractmethod
     def eval(self,eval_data):
 
         return NotImplementedError
