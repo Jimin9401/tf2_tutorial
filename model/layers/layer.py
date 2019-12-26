@@ -3,6 +3,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers,Model
 
+
 class GatedConvLayer(keras.layers.Layer):
 
     def __init__(self,hidden_dim,n_gram=3,decode=True):
@@ -33,6 +34,7 @@ class Embedding(layers.Layer):
     def __init__(self, vocab_size:int, embedding_dim:int, init_std:float=0.02, padding_idx:int=0):
         super(Embedding, self).__init__()
 
+        self.vocab_size=vocab_size
         # tf.Variable(shape=(vocab_size,embedding_dim),ini)
         self.embedding_weight = self.add_weight(shape=(vocab_size,embedding_dim),
                                                 initializer=keras.initializers.TruncatedNormal(stddev=init_std),
@@ -40,9 +42,20 @@ class Embedding(layers.Layer):
         # padding_weights = self.weights[0][padding_idx]
         # padding_weights.assign(tf.zeros_like(padding_weights))
 
-    # @tf.function(input_signature=(tf.TensorSpec(shape=[None,None],dtype=tf.int32),))
-    def call(self, x):
-        return tf.nn.embedding_lookup(self.embedding_weight,x,)
+
+    def call(self, x: tf.Tensor, oracle: tf.Tensor = None, decay:float =None):
+
+
+        x_one_hot = tf.one_hot(x, self.vocab_size)
+
+        if oracle is None:
+            return tf.matmul(x_one_hot,self.embedding_weight)
+
+        else:
+            oracle_one_hot=tf.one_hot(x, self.vocab_size)
+            inp=x_one_hot*decay+(1-decay)*oracle_one_hot
+
+            return tf.matmul(inp,self.embedding_weight)
 
 
 

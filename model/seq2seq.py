@@ -2,6 +2,7 @@ from layers.layer import Embedding
 from tensorflow import keras
 from layers.layers_util import dot_product_attention
 
+
 class Encoder(keras.Model):
     def __init__(self, vocab_size, hidden_size):
         super(Encoder, self).__init__()

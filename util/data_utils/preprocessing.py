@@ -31,6 +31,16 @@ def preprocessing(f_name,batch_size,test_size=0.2):
 
 
 
+def load_pickle(f_name):
+    data=pd.read_pickle(f_name)
+
+    paragraphs=data["paragraphs"]
+
+    return paragraphs
+
+
+
+
 
 
 def main():

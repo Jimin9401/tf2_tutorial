@@ -2,12 +2,16 @@ from tensorflow import keras
 import tensorflow as tf
 import os
 import numpy as np
-from abc import *
+from abc import abstractmethod
+from .briding_gap import oracle
+import math
+from datetime import datetime
+
 
 
 class ModelWrapper(object):
 
-    def __init__(self,model,eval_step,eval_after,model_name,output_dir):
+    def __init__(self,model,eval_step,eval_after,model_name=str(datetime.now()),output_dir="log"):
         self.model=model
         self.eval_step=eval_step
         self.eval_after=eval_after
@@ -189,3 +193,158 @@ class LMWrapper(ModelWrapper):
 
         return loss, accuracy
 
+
+
+
+
+class S2SWrapper_Oracle(S2SWrapper):
+
+    def __init__(self,model,eval_step:int,eval_after:int,model_name:str,output_dir,temperature:float=1.0):
+        super(S2SWrapper_Oracle,self).__init__(model,eval_step,eval_after,model_name,output_dir)
+
+        self.oracle_generator=oracle(model,temperature)
+        self.decay=1
+    def train(self, epoch,batchfier, lr,train_step=100,padding_index=0, batch_seqlen=512):
+
+
+        keras.backend.set_learning_phase(1)
+
+        self.get_optimizer(lr)
+        self.train_summary_writer = tf.summary.create_file_writer(self.train_log_dir)
+        self.eval_summary_writer = tf.summary.create_file_writer(self.eval_log_dir)
+
+        @tf.function(input_signature=(tf.TensorSpec(shape=[None, None], dtype=tf.int64),
+                                      tf.TensorSpec(shape=[None, None,None], dtype=tf.float32)),
+                     experimental_relax_shapes=True)
+        def compute_loss(true, predict):
+            batch_loss = tf.keras.losses.sparse_categorical_crossentropy(y_pred=predict, y_true=true,
+                                                                         from_logits=True)
+            loss_mask = tf.cast(tf.not_equal(x=true, y=0), dtype=tf.float32)
+
+            # pre_loss*=tf.cast(mask,tf.float32)
+
+            return tf.reduce_sum(batch_loss * loss_mask) / tf.reduce_sum(loss_mask)
+
+        @tf.function(input_signature=(tf.TensorSpec(shape=[None, None], dtype=tf.int64),
+                                      tf.TensorSpec(shape=[None, None], dtype=tf.int64),
+                                      tf.TensorSpec(shape=[None, None], dtype=tf.int64)),
+                     experimental_relax_shapes=True)
+        def train_one_step(x, y,y_oracle):
+            with tf.GradientTape() as tape:
+                predict = self.model(x, y,y_oracle,self.decay)
+                loss = compute_loss(y, predict)
+
+            grads = tape.gradient(loss, self.model.trainable_variables)
+            self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+            return loss
+
+        accuracy = 0.0
+        step_loss=0
+        n_iter = 0
+
+        for e in range(epoch):
+            pbar = tf.keras.utils.Progbar(100)
+            pbar_cnt = 0
+            for batch_src,batch_trg in batchfier:
+                y_oracle = self.oracle_generator.get_oracle(batch_src, batch_trg)
+                loss=train_one_step(batch_src,batch_trg,y_oracle)
+
+                pbar_cnt+=1
+                step_loss+=loss
+                pbar.update(pbar_cnt,[['loss',step_loss/pbar_cnt],['perplexity',tf.exp(step_loss/pbar_cnt)],['n_iter',int(n_iter)]])
+
+                if pbar_cnt==100:
+                    # with self.train_summary_writer.as_default():
+                    #     tf.summary.scalar('loss', step_loss/pbar_cnt, step=self.global_step)
+                    #     tf.summary.scalar('perplexity', math.exp(step_loss/pbar_cnt), step=self.global_step)
+                    n_iter+=1
+                    pbar = tf.keras.utils.Progbar(100)
+                    pbar_cnt = 0
+                    step_loss = 0
+                    self.decay-=1e-2
+
+                # if self.global_step % self.eval_step == 0 and self.global_step > self.eval_after:
+                #     self.eval(eval_data=eval_data)
+
+        return loss, accuracy
+
+
+class LMWrapper_Oracle(LMWrapper):
+
+    def __init__(self,model,eval_step:int,eval_after:int,model_name:str,output_dir,temperature:float=1.0,m:float=3.0):
+        super(LMWrapper_Oracle,self).__init__(model,eval_step,eval_after,model_name,output_dir)
+
+        self.oracle_generator=oracle(model,temperature)
+        self.m=m
+    def train(self, epoch,batchfier, lr,train_step=100,padding_index=0, batch_seqlen=512):
+
+
+        keras.backend.set_learning_phase(1)
+
+        self.get_optimizer(lr)
+        self.train_summary_writer = tf.summary.create_file_writer(self.train_log_dir)
+        self.eval_summary_writer = tf.summary.create_file_writer(self.eval_log_dir)
+
+        @tf.function(input_signature=(tf.TensorSpec(shape=[None, None], dtype=tf.int64),
+                                      tf.TensorSpec(shape=[None, None,None], dtype=tf.float32)),
+                     experimental_relax_shapes=True)
+        def compute_loss(true, predict):
+            batch_loss = tf.keras.losses.sparse_categorical_crossentropy(y_pred=predict, y_true=true,
+                                                                         from_logits=True)
+            loss_mask = tf.cast(tf.not_equal(x=true, y=0), dtype=tf.float32)
+
+            # pre_loss*=tf.cast(mask,tf.float32)
+
+            return tf.reduce_sum(batch_loss * loss_mask) / tf.reduce_sum(loss_mask)
+
+        @tf.function(input_signature=(tf.TensorSpec(shape=[None, None], dtype=tf.int64),
+                                      tf.TensorSpec(shape=[None, None], dtype=tf.int64),
+                                      tf.TensorSpec(shape=[None, None], dtype=tf.int64)),
+                     experimental_relax_shapes=True)
+        def train_one_step(x, y,y_oracle):
+
+            with tf.GradientTape() as tape:
+                predict = self.model(x,y_oracle,self.decay)
+                loss = compute_loss(y, predict)
+
+            grads = tape.gradient(loss, self.model.trainable_variables)
+            self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+            return loss
+
+        accuracy = 0.0
+        step_loss=0
+        n_iter = 0
+
+        for e in range(epoch):
+
+            self.decay=self.m/(self.m+math.exp(e/self.m))
+
+            pbar = tf.keras.utils.Progbar(100)
+            pbar_cnt = 0
+            for text in batchfier:
+
+                batch_src=text[:,:-1]
+                batch_trg=text[:,1:]
+
+                y_oracle = self.oracle_generator.get_oracle(batch_src)
+
+                loss=train_one_step(batch_src,batch_trg,y_oracle)
+
+                pbar_cnt+=1
+                step_loss+=loss
+                pbar.update(pbar_cnt,[['loss',step_loss/pbar_cnt],['perplexity',tf.exp(step_loss/pbar_cnt)],['n_iter',int(n_iter)]])
+
+
+                if pbar_cnt==100:
+                    # with self.train_summary_writer.as_default():
+                    #     tf.summary.scalar('loss', step_loss/pbar_cnt, step=self.global_step)
+                    #     tf.summary.scalar('perplexity', math.exp(step_loss/pbar_cnt), step=self.global_step)
+                    n_iter+=1
+                    pbar = tf.keras.utils.Progbar(100)
+                    pbar_cnt = 0
+                    step_loss = 0
+
+                # if self.global_step % self.eval_step == 0 and self.global_step > self.eval_after:
+                #     self.eval(eval_data=eval_data)
+
+        return loss, accuracy

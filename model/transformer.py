@@ -156,6 +156,31 @@ class DecoderBlock(layers.Layer):
 
 
 
+class DecoderBlock_uni(layers.Layer):
+    def __init__(self,d_model,d_ff,h,p_rate=0):
+        super(DecoderBlock_uni, self).__init__()
+        self.multi1=MultiheadAttention(d_model,h)
+        self.multi2=MultiheadAttention(d_model,h)
+        self.norm1=LayerNorm()
+        self.norm2=LayerNorm()
+
+        self.ffn=PositionwiseFF(d_ff,d_model)
+
+
+        self.dropout1=layers.Dropout(p_rate)
+        self.dropout2=layers.Dropout(p_rate)
+        self.dropout3=layers.Dropout(p_rate)
+
+    def call(self, inputs,enc_outputs,x_mask,y_mask):
+
+        z=self.multi1(inputs,inputs,inputs,y_mask)
+        z=self.dropout1(z)
+        z=self.norm1(inputs+z)
+
+        return self.dropout3(self.ffn(z))
+
+
+
 class Decoder(layers.Layer):
     def __init__(self,d_model,d_ff,h,num_layers):
         super(Decoder, self).__init__()
@@ -172,12 +197,10 @@ class Decoder(layers.Layer):
 
 
 
-class Transformer(keras.Model):
+class Transformer_Base(keras.Model):
     def __init__(self,num_layers,d_model,d_ff,h,vocab_size):
-        super(Transformer, self).__init__()
+        super(Transformer_Base, self).__init__()
 
-        # self.embedder = layers.Embedding(vocab_size, d_model, keras.initializers.RandomNormal(stddev=0.02),
-        #                                  input_shape=(vocab_size,))
 
         self.embedder=Embedding(vocab_size,d_model)
         self.encoder=Encoder(num_layer=num_layers,h=h,d_model=d_model,d_ff=d_ff)
@@ -194,6 +217,69 @@ class Transformer(keras.Model):
 
         src_embed=self.embedder(src)
         src_state=self.encoder(src_embed,src_mask)
+        trg_embed=self.embedder(trg)
+
+
+        dec_state=self.decoder(trg_embed,src_state,src_mask,tril)
+        predict=tf.matmul(dec_state,self.embedder.weights[0],transpose_b=True)
+
+        return predict
+
+
+class Transformer_LM(Transformer_Base):
+    def __init__(self,num_layers,d_model,d_ff,h,vocab_size):
+        super(Transformer_LM, self).__init__(num_layers,d_model,d_ff,h,vocab_size)
+
+        # self.embedder = layers.Embedding(vocab_size, d_model, keras.initializers.RandomNormal(stddev=0.02),
+        #                                  input_shape=(vocab_size,))
+
+        self.decoder=Decoder(d_model=d_model,d_ff=d_ff,h=h,num_layers=num_layers)
+
+        # self.classifer=layers.Dense(input_dim=d_model,units=vocab_size)
+        # self.embedder.weights([0])
+
+    def call(self,src,trg):
+
+        trg_seq_lens=tf.shape(trg)[1]
+        tril = tf.linalg.band_part(tf.ones((trg_seq_lens, trg_seq_lens), dtype=tf.float32), -1, 0)
+        src_mask=create_mask(src)
+
+        src_embed=self.embedder(src)
+        src_state=self.encoder(src_embed,src_mask)
+        trg_embed=self.embedder(trg)
+
+
+        dec_state=self.decoder(trg_embed,src_state,src_mask,tril)
+        predict=tf.matmul(dec_state,self.embedder.weights[0],transpose_b=True)
+
+        return predict
+
+
+class Transformer_Oracle(Transformer_Base):
+    def __init__(self,num_layers,d_model,d_ff,h,vocab_size):
+        super(Transformer_Oracle, self).__init__(num_layers,d_model,d_ff,h,vocab_size)
+
+        # self.embedder = layers.Embedding(vocab_size, d_model, keras.initializers.RandomNormal(stddev=0.02),
+        #                                  input_shape=(vocab_size,))
+
+        # self.embedder=Embedding(vocab_size,d_model)
+        # self.encoder=Encoder(num_layer=num_layers,h=h,d_model=d_model,d_ff=d_ff)
+        # self.decoder=Decoder(d_model=d_model,d_ff=d_ff,h=h,num_layers=num_layers)
+
+        # self.classifer=layers.Dense(input_dim=d_model,units=vocab_size)
+        # self.embedder.weights([0])
+
+    def call(self,src,trg,oracle=None,decay:float=None):
+
+        trg_seq_lens=tf.shape(trg)[1]
+        tril = tf.linalg.band_part(tf.ones((trg_seq_lens, trg_seq_lens), dtype=tf.float32), -1, 0)
+        src_mask=create_mask(src)
+
+        if oracle is None:
+            src_embed=self.embedder(src)
+        else:
+            src_embed = self.embedder(src,oracle,decay)
+        src_state=self.encoder(src_embed,src_mask)
 
         trg_embed=self.embedder(trg)
 
@@ -203,5 +289,6 @@ class Transformer(keras.Model):
 
 
         return predict
+
 
 
