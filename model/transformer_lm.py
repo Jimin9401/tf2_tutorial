@@ -130,6 +130,7 @@ class Transformer_LM_Base(keras.Model):
         # self.classifer=layers.Dense(input_dim=d_model,units=vocab_size)
         # self.embedder.weights([0])
 
+
     def call(self,inp):
 
         inp_seq_lens=tf.shape(inp)[1]

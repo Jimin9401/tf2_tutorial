@@ -47,6 +47,7 @@ class ModelWrapper(object):
         self.model.save_weights(path)
         print("saved at ",path)
 
+
     def restore(self,ckpt_dir,latest_ckpt=True):
 
         if latest_ckpt:

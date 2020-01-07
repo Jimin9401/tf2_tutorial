@@ -19,14 +19,17 @@ class oracle(object):
 
     def get_oracle(self,inp):
 
-        logits=self.model(inp)
+        logits=tf.stop_gradient(self.model(inp))
 
         pertubed_logits=gumbel_reparam(logits)
 
-        # pertubed_logits=tf.stop_gradient(pertubed_logits)
-
         return tf.argmax(pertubed_logits,-1)
 
+    def force_decoding(self, logits, indexes):
+        batch_end = (indexes == self.end_index)
 
+        for i, b in enumerate(batch_end.tolist()):
+            inp[i, tf.range(b-1), self.end_index.item()] = -1e5
 
+        return inp
 
